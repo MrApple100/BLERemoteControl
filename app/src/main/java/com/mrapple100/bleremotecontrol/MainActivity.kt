@@ -22,6 +22,7 @@ import kotlinx.coroutines.runBlocking
 import no.nordicsemi.android.ble.error.GattError
 import java.nio.ByteBuffer
 import java.util.*
+import kotlin.collections.ArrayList
 
 
 class MainActivity : AppCompatActivity() {
@@ -111,7 +112,9 @@ class MainActivity : AppCompatActivity() {
                    runBlocking(Dispatchers.Main) {
                        activityViewModel.statemotors.value = "Calibration"
                    }
-                   gatt.readCharacteristic(service.characteristics[1])
+                Thread.sleep(10000)
+
+                gatt.readCharacteristic(service.characteristics[1])
 
 
 
@@ -129,7 +132,6 @@ class MainActivity : AppCompatActivity() {
                 if (status === BluetoothGatt.GATT_SUCCESS) {
                     // Получаем данные характеристики
                     var value = characteristic!!.value.clone()
-
                         if(value[0]==0.toByte() && value[1]==0.toByte()){//Если все двигатели выключены
                             isOffMotors=true;
                             //и включаем двигатели
@@ -242,11 +244,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
     fun Position1(){
+        val pos1 = arrayListOf<kotlin.collections.ArrayList<Float>>( arrayListOf(0.8f, 12f, 0f, 10f, 0f ), arrayListOf( 0.9f, 10f, 0f, 10f, 0f ), arrayListOf( -0.8f, 10f, 0f, 4f, 0f ), arrayListOf( -0.8f, 12f, 0f, 10f, 0f ), arrayListOf( -0.9f, 10f, 0f, 10f, 0f ), arrayListOf(0.8f, 10f, 0f, 4f, 0f ), arrayListOf( -0.8f, 12f, 0f, 10f, 0f ), arrayListOf( 0.9f, 10f, 0f, 10f, 0f ), arrayListOf( -0.8f, 10f, 0f, 4f, 0f ), arrayListOf( 0.8f, 12f, 0f, 10f, 0f ), arrayListOf( -0.9f, 10f, 0f, 10f, 0f ), arrayListOf( 0.8f, 10f, 0f, 4f, 0f ) )
         val service = gatt!!.getService(BLP_SERVICE_UUID)
         val characteristic = service.getCharacteristic(service.characteristics[2].uuid)
         Log.d(TAG,characteristic.uuid.toString())
         var value :ByteArray? = null
-        value = byteArrayOf(0b11111111.toByte(), 0b00001111.toByte())//position
+        value =  ByteArray(pos1.size*pos1[0].size*Float.SIZE_BYTES)
+        val buffer = ByteBuffer.wrap(value)
+        for (i in pos1.indices){
+            for(j in pos1[0].indices){
+                buffer.putFloat(pos1[i][j])
+            }
+        }
 
         characteristic.value = value!!
         if (ActivityCompat.checkSelfPermission(
@@ -259,12 +268,46 @@ class MainActivity : AppCompatActivity() {
         gatt!!.writeCharacteristic(characteristic)
     }
     fun Position2(){
+
+       val pos21 = arrayOf( doubleArrayOf( 0.8, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 1.4, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( -1.8, 10.0, 0.0, 4.0, 0.0),
+        doubleArrayOf( -0.8, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( -1.4, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 1.8, 10.0, 0.0, 4.0, 0.0 ),
+            doubleArrayOf( -0.8, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 1.4, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( -1.8, 10.0, 0.0, 4.0, 0.0 ),
+            doubleArrayOf( 0.8, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( -1.4, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( -1.8, 10.0, 0.0, 4.0, 0.0 ) )
         val service = gatt!!.getService(BLP_SERVICE_UUID)
         val characteristic = service.getCharacteristic(service.characteristics[2].uuid)
         Log.d(TAG,characteristic.uuid.toString())
         var value :ByteArray? = null
+        value =  ByteArray(pos21.size*pos21[0].size*Double.SIZE_BYTES)
+        var buffer = ByteBuffer.wrap(value)
+        for (i in pos21.indices){
+            for(j in pos21[0].indices){
+                buffer.putDouble(pos21[i][j])
+            }
+        }
 
-        value = byteArrayOf(0b11111111.toByte(), 0b00001111.toByte())//position
+        characteristic.value = value!!
+        if (ActivityCompat.checkSelfPermission(
+                this@MainActivity,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        gatt!!.writeCharacteristic(characteristic)
+
+        Thread.sleep(3000)
+        
+       val pos22 =   arrayOf( doubleArrayOf(  0.8, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 0.9, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( -0.8, 10.0, 0.0, 4.0, 0.0 ), doubleArrayOf( -1.0, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 1.2, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 0.3, 10.0, 0.0, 4.0, 0.0 ), doubleArrayOf( -0.8, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 0.9, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( -0.8, 10.0, 0.0, 4.0, 0.0 ), doubleArrayOf( 0.8, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( -0.9, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 0.8, 10.0, 0.0, 4.0, 0.0 ) )
+
+        value= null
+        value =  ByteArray(pos22.size*pos22[0].size*Double.SIZE_BYTES)
+        buffer = ByteBuffer.wrap(value)
+        for (i in pos22.indices){
+            for(j in pos22[0].indices){
+                buffer.putDouble(pos22[i][j])
+            }
+        }
+
         characteristic.value = value!!
         if (ActivityCompat.checkSelfPermission(
                 this@MainActivity,
@@ -276,13 +319,19 @@ class MainActivity : AppCompatActivity() {
         gatt!!.writeCharacteristic(characteristic)
     }
     fun Position3(){
+        val pos31 = arrayOf( doubleArrayOf( 0.8, 12.0,0.0,10.0,0.0 ), doubleArrayOf( 0.9, 10.0,0.0,10.0,0.0 ), doubleArrayOf( -0.8, 10.0,0.0,4.0, 0.0 ), doubleArrayOf( -0.8, 12.0,0.0,10.0, 0.0 ), doubleArrayOf( -0.9, 10.0,0.0,10.0, 0.0 ), doubleArrayOf( 0.8, 10.0,0.0,4.0, 0.0 ), doubleArrayOf( -0.8, 12.0,0.0,10.0, 0.0 ), doubleArrayOf( 0.9, 10.0,0.0,10.0, 0.0 ), doubleArrayOf( -0.8, 10.0,0.0,4.0, 0.0 ), doubleArrayOf( 0.8, 12.0,0.0,10.0, 0.0 ), doubleArrayOf( -0.9, 10.0,0.0,10.0, 0.0 ), doubleArrayOf( 0.8, 10.0,0.0,4.0, 0.0 ) )
+
         val service = gatt!!.getService(BLP_SERVICE_UUID)
         val characteristic = service.getCharacteristic(service.characteristics[2].uuid)
         Log.d(TAG,characteristic.uuid.toString())
         var value :ByteArray? = null
-
-        value = byteArrayOf(0b11111111.toByte(), 0b00001111.toByte())//position
-
+        value =  ByteArray(pos31.size*pos31[0].size*Double.SIZE_BYTES)
+        var buffer = ByteBuffer.wrap(value)
+        for (i in pos31.indices){
+            for(j in pos31[0].indices){
+                buffer.putDouble(pos31[i][j])
+            }
+        }
         characteristic.value = value!!
         if (ActivityCompat.checkSelfPermission(
                 this@MainActivity,
@@ -293,6 +342,50 @@ class MainActivity : AppCompatActivity() {
         }
         gatt!!.writeCharacteristic(characteristic)
 
+        Thread.sleep(3000)
+
+        val pos32 = arrayOf( doubleArrayOf( 8.0, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 0.9, 10.0, 0.0, 10.0,0.0), doubleArrayOf( -8.0, 10.0, 0.0, 4.0,0.0), doubleArrayOf( -8.0, 12.0, 0.0, 10.0,0.0), doubleArrayOf( -0.9, 10.0, 0.0, 10.0,0.0), doubleArrayOf( 8.0, 10.0, 0.0, 4.0,0.0), doubleArrayOf( -8.0, 12.0, 0.0, 10.0,0.0), doubleArrayOf( 0.9, 10.0, 0.0, 10.0,0.0), doubleArrayOf( -8.0, 10.0, 0.0, 4.0,0.0), doubleArrayOf( 1.6, 12.0, 0.0, 10.0,0.0), doubleArrayOf( -8.0, 10.0, 0.0, 10.0,0.0), doubleArrayOf( 0.0, 10.0, 0.0, 4.0,0.0) )
+
+        value = null
+        value =  ByteArray(pos32.size*pos32[0].size*Double.SIZE_BYTES)
+        buffer = ByteBuffer.wrap(value)
+        for (i in pos32.indices){
+            for(j in pos32[0].indices){
+                buffer.putDouble(pos32[i][j])
+            }
+        }
+        characteristic.value = value!!
+        if (ActivityCompat.checkSelfPermission(
+                this@MainActivity,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        gatt!!.writeCharacteristic(characteristic)
+
+        Thread.sleep(5000)
+
+
+        val pos33 = arrayOf( doubleArrayOf( 8.0, 12.0, 0.0, 10.0,0.0), doubleArrayOf( 0.9, 10.0, 0.0, 10.0,0.0), doubleArrayOf( -8.0, 10.0, 0.0, 4.0,0.0), doubleArrayOf( -8.0, 12.0, 0.0, 10.0,0.0), doubleArrayOf( -0.9, 10.0, 0.0, 10.0,0.0), doubleArrayOf( 8.0, 10.0, 0.0, 4.0,0.0), doubleArrayOf( -8.0, 12.0, 0.0, 10.0,0.0), doubleArrayOf( 0.9, 10.0, 0.0, 10.0,0.0), doubleArrayOf( -8.0, 10.0, 0.0, 4.0,0.0), doubleArrayOf( 8.0, 12.0, 0.0, 10.0,0.0), doubleArrayOf( -0.9, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 8.0, 10.0, 0.0, 4.0, 0.0 ) )
+
+        value = null
+        value =  ByteArray(pos33.size*pos33[0].size*Double.SIZE_BYTES)
+        buffer = ByteBuffer.wrap(value)
+        for (i in pos33.indices){
+            for(j in pos33[0].indices){
+                buffer.putDouble(pos33[i][j])
+            }
+        }
+        characteristic.value = value!!
+        if (ActivityCompat.checkSelfPermission(
+                this@MainActivity,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        gatt!!.writeCharacteristic(characteristic)
     }
 
     fun requestPerms() {

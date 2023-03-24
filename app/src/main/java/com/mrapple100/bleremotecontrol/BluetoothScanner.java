@@ -110,6 +110,7 @@ public class BluetoothScanner {
         } else {
             Log.i(TAG, "No scan in progress");
         }
+
     }
 }
 
