@@ -10,6 +10,7 @@ import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -24,7 +25,7 @@ import java.util.List;
 public class BluetoothScanner {
 
     private static final String TAG = BluetoothScanner.class.getSimpleName();
-    private static final long SCAN_PERIOD = 1000; // 1 seconds
+    private static final long SCAN_PERIOD = 4000; // 4 seconds
     private BluetoothAdapter mBluetoothAdapter;
     private BluetoothLeScanner mBluetoothLeScanner;
     private ScanCallback mScanCallback;
@@ -34,11 +35,18 @@ public class BluetoothScanner {
     private BluetoothDevice bluetoothDevice;
     private ActivityViewModel activityViewModel;
 
-    public BluetoothScanner(ActivityViewModel activityViewModel,Context context) {
+    public BluetoothScanner(ActivityViewModel activityViewModel, Context context) {
         this.context = context;
         mHandler = new Handler(Looper.getMainLooper());
         BluetoothManager bluetoothManager = (BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+
+            return;
+        }
         mBluetoothAdapter = bluetoothManager.getAdapter();
+        mBluetoothAdapter.startDiscovery();
+
         mBluetoothLeScanner = mBluetoothAdapter.getBluetoothLeScanner();
         this.activityViewModel = activityViewModel;
     }
@@ -47,7 +55,7 @@ public class BluetoothScanner {
         if (!mScanning) {
             Log.i(TAG, "Starting scan...");
             ScanSettings settings = new ScanSettings.Builder()
-                    .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
+                    .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
                     .setReportDelay(0)
                     .build();
             mScanCallback = new ScanCallback() {
@@ -55,7 +63,8 @@ public class BluetoothScanner {
                 public void onScanResult(int callbackType, ScanResult result) {
                     super.onScanResult(callbackType, result);
                     BluetoothDevice device = result.getDevice();
-                    if (ActivityCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    System.out.println("RESULT");
+                    if( Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
 
                         return;
                     }
@@ -69,9 +78,10 @@ public class BluetoothScanner {
                 @Override
                 public void onBatchScanResults(List<ScanResult> results) {
                     super.onBatchScanResults(results);
+
                     for (ScanResult result : results) {
                         BluetoothDevice device = result.getDevice();
-                        if (ActivityCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
 
                             return;
                         }
@@ -91,7 +101,7 @@ public class BluetoothScanner {
 
 
             mBluetoothLeScanner.startScan(filters, settings, mScanCallback);
-            mHandler.postDelayed(() -> stopScan(), SCAN_PERIOD);
+            mHandler.postDelayed(this::stopScan, SCAN_PERIOD);
             mScanning = true;
         } else {
             Log.i(TAG, "Scan already in progress");
@@ -102,7 +112,7 @@ public class BluetoothScanner {
     public void stopScan() {
         if (mScanning) {
             Log.i(TAG, "Stopping scan...");
-            if (ActivityCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
                 return;
             }
             mBluetoothLeScanner.stopScan(mScanCallback);
