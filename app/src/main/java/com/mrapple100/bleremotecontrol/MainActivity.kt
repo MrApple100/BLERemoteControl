@@ -1,33 +1,32 @@
 package com.mrapple100.bleremotecontrol
 
 import android.Manifest
-import android.bluetooth.BluetoothGatt
-import android.bluetooth.BluetoothGattCallback
-import android.bluetooth.BluetoothGattCharacteristic
-import android.bluetooth.BluetoothProfile
+import android.bluetooth.*
+import android.bluetooth.BluetoothDevice.*
 import android.bluetooth.le.ScanFilter
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.view.View
 import android.widget.Button
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.ViewModelProvider
 import com.mrapple100.bleremotecontrol.databinding.ActivityMainBinding
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
-import no.nordicsemi.android.ble.error.GattError
+import kotlinx.coroutines.*
 import java.nio.ByteBuffer
 import java.util.*
-import kotlin.collections.ArrayList
 
 
 class MainActivity : AppCompatActivity() {
     private val BLP_SERVICE_UUID: UUID? = UUID.fromString("e7112e6c-c396-11ed-afa1-0242ac120002");//e7112e6c-c396-11ed-afa1-0242ac120002
-    private val names:Array<String>? = arrayOf("RDB-1-test")
+    private val names:Array<String>? = arrayOf("RDB-1")
     private val mac:Array<String>? = arrayOf("0C:B8:15:F6:0D:52")
 
 
@@ -37,6 +36,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bluetoothGattCallback: BluetoothGattCallback
     private lateinit var bluetoothScanner:BluetoothScanner
     private lateinit var activityViewModel: ActivityViewModel
+
+    private lateinit var service:BluetoothGattService;
+
 
     companion object{
         private var status:Int=-1;
@@ -97,24 +99,45 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
                 super.onServicesDiscovered(gatt, status)
-                val service = gatt!!.getService(BLP_SERVICE_UUID)
-                service.characteristics.stream().forEach({it->Log.d(TAG, ""+it.uuid+" "+it.properties+" "+it.instanceId+" ")}).toString()
-                Log.d(TAG, service.characteristics[0].uuid.toString())
 
+                println("STATUS "+status)
+                println(gatt!!.services.size)
+                for(ser in gatt!!.services){
+                    println(" "+ ser.uuid+" "+ ser.characteristics.toString()+" "+ser.type+" "+ser.includedServices)
+                }
+                println(gatt!!.services[2].getCharacteristic(UUID.fromString("ffffff00-0000-1000-8000-00805f9b34fb")))
+                println("UUID "+UUID.fromString("ffffff00-0000-1000-8000-00805f9b34fb"))
+                println(gatt!!.services.size)
+
+                    service = gatt!!.getService(BLP_SERVICE_UUID)
+
+//                if(service.getCharacteristic(UUID.fromString("ffffff00-0000-1000-8000-00805f9b34fb"))==null){
+//                    service.characteristics.clear()
+//                    service.addCharacteristic(BluetoothGattCharacteristic(UUID.fromString("ffffff00-0000-1000-8000-00805f9b34fb"),10,0))
+//                    service.addCharacteristic(BluetoothGattCharacteristic(UUID.fromString("ffffff01-0000-1000-8000-00805f9b34fb"),2,0))
+//                    service.addCharacteristic(BluetoothGattCharacteristic(UUID.fromString("ffffff02-0000-1000-8000-00805f9b34fb"),8,0))
+//                }
+                for(ser in gatt!!.services){
+                    println("CHARASER "+ ser.uuid+" "+ ser.characteristics.toString()+" "+ser.type+" "+ser.includedServices)
+                }
+                for(chara in service.characteristics) {
+                    println(TAG + " " + chara.uuid + " " + chara.properties + " " + chara.permissions + " ")
+                }
                 val characteristic0 = service.getCharacteristic(service.characteristics[0].uuid)
                 Log.d(TAG,characteristic0.toString())
-                var value :ByteArray? = null
 
-               if (ActivityCompat.checkSelfPermission(this@MainActivity, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+               if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(this@MainActivity, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                    return
                }
 
-                   runBlocking(Dispatchers.Main) {
-                       activityViewModel.statemotors.value = "Calibration"
-                   }
-                Thread.sleep(10000)
+                CoroutineScope(Dispatchers.IO).launch {
+                    withContext(Dispatchers.Main) {
+                        activityViewModel.statemotors.value = "Calibration"
+                    }
+                }
+               // Thread.sleep(10000)
 
-                gatt.readCharacteristic(service.characteristics[1])
+                gatt.readCharacteristic(service.characteristics[0])//заменил 1 на 0
 
 
 
@@ -129,28 +152,71 @@ class MainActivity : AppCompatActivity() {
                 status: Int
             ) {
                 super.onCharacteristicRead(gatt, characteristic, status)
+                println(" "+status + " "+ characteristic!!.uuid)
                 if (status === BluetoothGatt.GATT_SUCCESS) {
                     // Получаем данные характеристики
                     var value = characteristic!!.value.clone()
-                        if(value[0]==0.toByte() && value[1]==0.toByte()){//Если все двигатели выключены
-                            isOffMotors=true;
+                    println(Arrays.toString(value))
+                        if(value[0]==(0).toByte() && value[1]==(0).toByte()) {//Если все двигатели выключены
+                            isOffMotors = true;
                             //и включаем двигатели
                             value = byteArrayOf(0b11111111.toByte(), 0b00001111.toByte())
-                            val service = gatt!!.getService(BLP_SERVICE_UUID)
                             val characteristic0 = service.characteristics[0];
                             characteristic0.value = value!!
-                            if (ActivityCompat.checkSelfPermission(this@MainActivity, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(
+                                    this@MainActivity,
+                                    Manifest.permission.BLUETOOTH_CONNECT
+                                ) != PackageManager.PERMISSION_GRANTED
+                            ) {
                                 return
                             }
                             gatt!!.writeCharacteristic(characteristic0)
-                            runBlocking(Dispatchers.Main) {
-                                activityViewModel.statemotors.value = "ON"
+
+
+                        }else{
+                            CoroutineScope(Dispatchers.IO).launch {
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(this@MainActivity, "Двигатели уже включены!", Toast.LENGTH_SHORT).show()
+                                    activityViewModel.statemotors.value = "ON"
+                                }
                             }
                         }
                     // Делаем что-то с полученными данными
                 } else {
                     // Чтение характеристики не удалось
                 }
+            }
+
+            override fun onCharacteristicWrite(
+                gatt: BluetoothGatt?,
+                characteristic: BluetoothGattCharacteristic?,
+                status: Int
+            ) {
+                super.onCharacteristicWrite(gatt, characteristic, status)
+                println(characteristic == service.characteristics[0])
+                if (status === BluetoothGatt.GATT_SUCCESS) {
+                    if (characteristic == service.characteristics[0]){
+
+                        CoroutineScope(Dispatchers.IO).launch {
+                            withContext(Dispatchers.Main) {
+                                activityViewModel.statemotors.value = "ON"
+                            }
+                        }
+                    } else if (characteristic == service.characteristics[2]) {
+                        println("VALUE "+Arrays.toString(characteristic!!.value))
+
+                        val floats = FloatArray(characteristic.value.size/4);
+                            var i = 0
+                            while (i*4 < characteristic.value.size) {
+                                val myFloat = ByteBuffer.wrap(characteristic.value).getFloat(i*4)
+                                floats.set(i,myFloat)
+                                i += 1
+                            }
+                        println("FLOAT "+Arrays.toString(floats))
+                    }
+                }
+
+
             }
         }
 
@@ -175,30 +241,32 @@ class MainActivity : AppCompatActivity() {
             for (name in names) {
                 println(name)
                 val filter = ScanFilter.Builder()
-                    .setDeviceAddress(mac!![0])
+                   // .setDeviceAddress(mac!![0])
                     .setDeviceName(name)
                     .build()
                 filters.add(filter)
             }
         }
-
-            if (ActivityCompat.checkSelfPermission(this@MainActivity,Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
-                requestPerms();
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(this@MainActivity,Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED) {
+                requestPermsBLE();
             }else
-            if (ActivityCompat.checkSelfPermission(this@MainActivity,Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED) {
-                requestPerms();
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(this@MainActivity,Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED) {
+                requestPermsBLE();
             }else
-//            if (ActivityCompat.checkSelfPermission(this@MainActivity,Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED) {
-//                requestPerms();
-//            }else
-            if (ActivityCompat.checkSelfPermission(this@MainActivity,Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                requestPerms();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(this@MainActivity,Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+                requestPermsBLE();
             }else
-            if (ActivityCompat.checkSelfPermission(this@MainActivity,Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                requestPerms();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(this@MainActivity,Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                requestPermsBLE();
             }else
-            if (ActivityCompat.checkSelfPermission(this@MainActivity,Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                requestPerms();
+            if ( ActivityCompat.checkSelfPermission(this@MainActivity,Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                requestPermsLoc();
+            }else
+            if ( ActivityCompat.checkSelfPermission(this@MainActivity,Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                requestPermsLoc();
+            }else
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(this@MainActivity,Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                requestPermsLoc();
             }else {
                 bluetoothScanner.startScan(filters)
                 Log.d(TAG, "scan started");
@@ -212,21 +280,32 @@ class MainActivity : AppCompatActivity() {
 
     fun Connect(){
 
-       if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
         ) {
             return
         }
-        val gatt: BluetoothGatt = activityViewModel.foundDevice.value!!.connectGatt(this, false, bluetoothGattCallback)
+        if(Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            pairDevice(activityViewModel.foundDevice.value)
+        }
+
+        if(activityViewModel.foundDevice.value!=null) {
+            val gatt: BluetoothGatt = activityViewModel.foundDevice.value!!
+                .connectGatt(this, false, bluetoothGattCallback, TRANSPORT_AUTO
+            )
+            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                gatt.readPhy()
+            }
+        }
 
     }
     fun Disconnect(){
 
     }
     fun OnOffMotors(){
-        if (ActivityCompat.checkSelfPermission(this@MainActivity,Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-            requestPerms();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(this@MainActivity,Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            requestPermsBLE();
         }
-        if(status == GattError.GATT_SUCCESS) {
+        if(status == BluetoothGatt.GATT_SUCCESS) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 // Мы подключились, можно запускать обнаружение сервисов
                 gatt?.discoverServices();
@@ -243,22 +322,44 @@ class MainActivity : AppCompatActivity() {
             gatt?.close();
         }
     }
+
+    fun obrFloat( value:ByteArray):ByteArray{
+        var i=0;
+
+        while(i<value.size){
+            var v3:Byte
+            v3 = value[i+3]
+            value[i+3] = value[i]
+            value[i] = v3
+
+            v3 = value[i+2]
+            value[i+2] = value[i+1]
+            value[i+1] = v3
+
+            i+=4;
+        }
+        return value;
+    }
+
     fun Position1(){
         val pos1 = arrayListOf<kotlin.collections.ArrayList<Float>>( arrayListOf(0.8f, 12f, 0f, 10f, 0f ), arrayListOf( 0.9f, 10f, 0f, 10f, 0f ), arrayListOf( -0.8f, 10f, 0f, 4f, 0f ), arrayListOf( -0.8f, 12f, 0f, 10f, 0f ), arrayListOf( -0.9f, 10f, 0f, 10f, 0f ), arrayListOf(0.8f, 10f, 0f, 4f, 0f ), arrayListOf( -0.8f, 12f, 0f, 10f, 0f ), arrayListOf( 0.9f, 10f, 0f, 10f, 0f ), arrayListOf( -0.8f, 10f, 0f, 4f, 0f ), arrayListOf( 0.8f, 12f, 0f, 10f, 0f ), arrayListOf( -0.9f, 10f, 0f, 10f, 0f ), arrayListOf( 0.8f, 10f, 0f, 4f, 0f ) )
-        val service = gatt!!.getService(BLP_SERVICE_UUID)
+        //val pos1 = arrayListOf(FloatArray(5,{i ->0f}),FloatArray(5,{i ->0f}),FloatArray(5,{i ->0f}),FloatArray(5,{i ->0f}),FloatArray(5,{i ->0f}),FloatArray(5,{i ->0f}),FloatArray(5,{i ->0f}),FloatArray(5,{i ->0f}),FloatArray(5,{i ->0f}),FloatArray(5,{i ->0f}),FloatArray(5,{i ->0f}),FloatArray(5,{i ->0f}))
         val characteristic = service.getCharacteristic(service.characteristics[2].uuid)
         Log.d(TAG,characteristic.uuid.toString())
         var value :ByteArray? = null
         value =  ByteArray(pos1.size*pos1[0].size*Float.SIZE_BYTES)
         val buffer = ByteBuffer.wrap(value)
-        for (i in pos1.indices){
-            for(j in pos1[0].indices){
-                buffer.putFloat(pos1[i][j])
+            for (i in pos1.indices){
+                for(j in pos1[0].indices){
+                    buffer.putFloat(pos1[i][j])
             }
         }
 
+        println("START "+Arrays.toString(value))
+
+        value = obrFloat(value)
         characteristic.value = value!!
-        if (ActivityCompat.checkSelfPermission(
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(
                 this@MainActivity,
                 Manifest.permission.BLUETOOTH_CONNECT
             ) != PackageManager.PERMISSION_GRANTED
@@ -266,27 +367,28 @@ class MainActivity : AppCompatActivity() {
             return
         }
         gatt!!.writeCharacteristic(characteristic)
+       // gatt!!.writeCharacteristic(service.characteristics[2])
     }
     fun Position2(){
 
-       val pos21 = arrayOf( doubleArrayOf( 0.8, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 1.4, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( -1.8, 10.0, 0.0, 4.0, 0.0),
-        doubleArrayOf( -0.8, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( -1.4, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 1.8, 10.0, 0.0, 4.0, 0.0 ),
-            doubleArrayOf( -0.8, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 1.4, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( -1.8, 10.0, 0.0, 4.0, 0.0 ),
-            doubleArrayOf( 0.8, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( -1.4, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( -1.8, 10.0, 0.0, 4.0, 0.0 ) )
-        val service = gatt!!.getService(BLP_SERVICE_UUID)
+       val pos21 = arrayOf( floatArrayOf( 0.8f, 12.0f, 0.0f, 10.0f, 0.0f ), floatArrayOf( 1.4f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -1.8f, 10.0f, 0.0f, 4.0f, 0.0f),
+        floatArrayOf( -0.8f, 12.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -1.4f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( 1.8f, 10.0f, 0.0f, 4.0f,0.0f),
+            floatArrayOf( -0.8f, 12.0f, 0.0f, 10.0f,0.0f), floatArrayOf( 1.4f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -1.8f, 10.0f, 0.0f, 4.0f,0.0f),
+            floatArrayOf( 0.8f, 12.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -1.4f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -1.8f, 10.0f, 0.0f, 4.0f,0.0f) )
         val characteristic = service.getCharacteristic(service.characteristics[2].uuid)
         Log.d(TAG,characteristic.uuid.toString())
         var value :ByteArray? = null
-        value =  ByteArray(pos21.size*pos21[0].size*Double.SIZE_BYTES)
+        value =  ByteArray(pos21.size*pos21[0].size*Float.SIZE_BYTES)
         var buffer = ByteBuffer.wrap(value)
         for (i in pos21.indices){
             for(j in pos21[0].indices){
-                buffer.putDouble(pos21[i][j])
+                buffer.putFloat(pos21[i][j])
             }
         }
+        value = obrFloat(value)
 
         characteristic.value = value!!
-        if (ActivityCompat.checkSelfPermission(
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(
                 this@MainActivity,
                 Manifest.permission.BLUETOOTH_CONNECT
             ) != PackageManager.PERMISSION_GRANTED
@@ -297,19 +399,20 @@ class MainActivity : AppCompatActivity() {
 
         Thread.sleep(3000)
         
-       val pos22 =   arrayOf( doubleArrayOf(  0.8, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 0.9, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( -0.8, 10.0, 0.0, 4.0, 0.0 ), doubleArrayOf( -1.0, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 1.2, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 0.3, 10.0, 0.0, 4.0, 0.0 ), doubleArrayOf( -0.8, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 0.9, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( -0.8, 10.0, 0.0, 4.0, 0.0 ), doubleArrayOf( 0.8, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( -0.9, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 0.8, 10.0, 0.0, 4.0, 0.0 ) )
+       val pos22 =   arrayOf( floatArrayOf(  0.8f, 12.0f, 0.0f, 10.0f,0.0f), floatArrayOf( 0.9f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -0.8f, 10.0f, 0.0f, 4.0f,0.0f), floatArrayOf( -1.0f, 12.0f, 0.0f, 10.0f,0.0f), floatArrayOf( 1.2f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( 0.3f, 10.0f, 0.0f, 4.0f,0.0f), floatArrayOf( -0.8f, 12.0f, 0.0f, 10.0f,0.0f), floatArrayOf( 0.9f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -0.8f, 10.0f, 0.0f, 4.0f,0.0f), floatArrayOf( 0.8f, 12.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -0.9f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( 0.8f, 10.0f, 0.0f, 4.0f,0.0f) )
 
         value= null
-        value =  ByteArray(pos22.size*pos22[0].size*Double.SIZE_BYTES)
+        value =  ByteArray(pos22.size*pos22[0].size*Float.SIZE_BYTES)
         buffer = ByteBuffer.wrap(value)
         for (i in pos22.indices){
             for(j in pos22[0].indices){
-                buffer.putDouble(pos22[i][j])
+                buffer.putFloat(pos22[i][j])
             }
         }
+        value = obrFloat(value)
 
         characteristic.value = value!!
-        if (ActivityCompat.checkSelfPermission(
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(
                 this@MainActivity,
                 Manifest.permission.BLUETOOTH_CONNECT
             ) != PackageManager.PERMISSION_GRANTED
@@ -319,21 +422,22 @@ class MainActivity : AppCompatActivity() {
         gatt!!.writeCharacteristic(characteristic)
     }
     fun Position3(){
-        val pos31 = arrayOf( doubleArrayOf( 0.8, 12.0,0.0,10.0,0.0 ), doubleArrayOf( 0.9, 10.0,0.0,10.0,0.0 ), doubleArrayOf( -0.8, 10.0,0.0,4.0, 0.0 ), doubleArrayOf( -0.8, 12.0,0.0,10.0, 0.0 ), doubleArrayOf( -0.9, 10.0,0.0,10.0, 0.0 ), doubleArrayOf( 0.8, 10.0,0.0,4.0, 0.0 ), doubleArrayOf( -0.8, 12.0,0.0,10.0, 0.0 ), doubleArrayOf( 0.9, 10.0,0.0,10.0, 0.0 ), doubleArrayOf( -0.8, 10.0,0.0,4.0, 0.0 ), doubleArrayOf( 0.8, 12.0,0.0,10.0, 0.0 ), doubleArrayOf( -0.9, 10.0,0.0,10.0, 0.0 ), doubleArrayOf( 0.8, 10.0,0.0,4.0, 0.0 ) )
+        val pos31 = arrayOf( floatArrayOf( 0.8f, 12.0f, 0.0f, 10.0f,0.0f), floatArrayOf( 0.9f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -0.8f, 10.0f, 0.0f, 4.0f,0.0f), floatArrayOf( -0.8f, 12.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -0.9f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( 0.8f, 10.0f, 0.0f, 4.0f,0.0f), floatArrayOf( -0.8f, 12.0f,0.0f,10.0f,0.0f), floatArrayOf( 0.9f, 10.0f,0.0f,10.0f,0.0f), floatArrayOf( -0.8f, 10.0f,0.0f,4.0f,0.0f), floatArrayOf( 0.8f, 12.0f,0.0f,10.0f,0.0f), floatArrayOf( -0.9f, 10.0f,0.0f,10.0f,0.0f), floatArrayOf( 0.8f, 10.0f,0.0f,4.0f,0.0f) )
 
-        val service = gatt!!.getService(BLP_SERVICE_UUID)
         val characteristic = service.getCharacteristic(service.characteristics[2].uuid)
         Log.d(TAG,characteristic.uuid.toString())
         var value :ByteArray? = null
-        value =  ByteArray(pos31.size*pos31[0].size*Double.SIZE_BYTES)
+        value =  ByteArray(pos31.size*pos31[0].size*Float.SIZE_BYTES)
         var buffer = ByteBuffer.wrap(value)
         for (i in pos31.indices){
             for(j in pos31[0].indices){
-                buffer.putDouble(pos31[i][j])
+                buffer.putFloat(pos31[i][j])
             }
         }
+        value = obrFloat(value)
+
         characteristic.value = value!!
-        if (ActivityCompat.checkSelfPermission(
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(
                 this@MainActivity,
                 Manifest.permission.BLUETOOTH_CONNECT
             ) != PackageManager.PERMISSION_GRANTED
@@ -343,19 +447,22 @@ class MainActivity : AppCompatActivity() {
         gatt!!.writeCharacteristic(characteristic)
 
         Thread.sleep(3000)
-
-        val pos32 = arrayOf( doubleArrayOf( 8.0, 12.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 0.9, 10.0, 0.0, 10.0,0.0), doubleArrayOf( -8.0, 10.0, 0.0, 4.0,0.0), doubleArrayOf( -8.0, 12.0, 0.0, 10.0,0.0), doubleArrayOf( -0.9, 10.0, 0.0, 10.0,0.0), doubleArrayOf( 8.0, 10.0, 0.0, 4.0,0.0), doubleArrayOf( -8.0, 12.0, 0.0, 10.0,0.0), doubleArrayOf( 0.9, 10.0, 0.0, 10.0,0.0), doubleArrayOf( -8.0, 10.0, 0.0, 4.0,0.0), doubleArrayOf( 1.6, 12.0, 0.0, 10.0,0.0), doubleArrayOf( -8.0, 10.0, 0.0, 10.0,0.0), doubleArrayOf( 0.0, 10.0, 0.0, 4.0,0.0) )
+//пиздец тут большие проблемы
+// перепроверить!!!!!!!!!!!!!!!!!
+            //       val pos32 = arrayOf( floatArrayOf( 0.0f, 12.0f, 0.0f, 10.0f,0.0f), floatArrayOf( 0.9f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -0.8f, 10.0f, 0.0f, 4.0f,0.0f), floatArrayOf( -0.8f, 12.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -0.9f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( 0.8f, 10.0f, 0.0f, 4.0f,0.0f), floatArrayOf( -8.0f, 12.0f, 0.0f, 10.0f,0.0f), floatArrayOf( 0.9f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -0.8f, 10.0f, 0.0f, 4.0f,0.0f), floatArrayOf( 1.6f, 12.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -0.8f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( 0.0f, 10.0f, 0.0f, 4.0f,0.0f) )
 
         value = null
-        value =  ByteArray(pos32.size*pos32[0].size*Double.SIZE_BYTES)
+        value =  ByteArray(pos32.size*pos32[0].size*Float.SIZE_BYTES)
         buffer = ByteBuffer.wrap(value)
         for (i in pos32.indices){
             for(j in pos32[0].indices){
-                buffer.putDouble(pos32[i][j])
+                buffer.putFloat(pos32[i][j])
             }
         }
+        value = obrFloat(value)
+
         characteristic.value = value!!
-        if (ActivityCompat.checkSelfPermission(
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(
                 this@MainActivity,
                 Manifest.permission.BLUETOOTH_CONNECT
             ) != PackageManager.PERMISSION_GRANTED
@@ -367,18 +474,20 @@ class MainActivity : AppCompatActivity() {
         Thread.sleep(5000)
 
 
-        val pos33 = arrayOf( doubleArrayOf( 8.0, 12.0, 0.0, 10.0,0.0), doubleArrayOf( 0.9, 10.0, 0.0, 10.0,0.0), doubleArrayOf( -8.0, 10.0, 0.0, 4.0,0.0), doubleArrayOf( -8.0, 12.0, 0.0, 10.0,0.0), doubleArrayOf( -0.9, 10.0, 0.0, 10.0,0.0), doubleArrayOf( 8.0, 10.0, 0.0, 4.0,0.0), doubleArrayOf( -8.0, 12.0, 0.0, 10.0,0.0), doubleArrayOf( 0.9, 10.0, 0.0, 10.0,0.0), doubleArrayOf( -8.0, 10.0, 0.0, 4.0,0.0), doubleArrayOf( 8.0, 12.0, 0.0, 10.0,0.0), doubleArrayOf( -0.9, 10.0, 0.0, 10.0, 0.0 ), doubleArrayOf( 8.0, 10.0, 0.0, 4.0, 0.0 ) )
+        val pos33 = arrayOf( floatArrayOf( 8.0f, 12.0f, 0.0f, 10.0f,0.0f), floatArrayOf( 0.9f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -8.0f, 10.0f, 0.0f, 4.0f,0.0f), floatArrayOf( -8.0f, 12.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -0.9f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( 8.0f, 10.0f, 0.0f, 4.0f,0.0f), floatArrayOf( -8.0f, 12.0f, 0.0f, 10.0f,0.0f), floatArrayOf( 0.9f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -8.0f, 10.0f, 0.0f, 4.0f,0.0f), floatArrayOf( 8.0f, 12.0f, 0.0f, 10.0f,0.0f), floatArrayOf( -0.9f, 10.0f, 0.0f, 10.0f,0.0f), floatArrayOf( 8.0f, 10.0f, 0.0f, 4.0f,0.0f) )
 
         value = null
-        value =  ByteArray(pos33.size*pos33[0].size*Double.SIZE_BYTES)
+        value =  ByteArray(pos33.size*pos33[0].size*Float.SIZE_BYTES)
         buffer = ByteBuffer.wrap(value)
         for (i in pos33.indices){
             for(j in pos33[0].indices){
-                buffer.putDouble(pos33[i][j])
+                buffer.putFloat(pos33[i][j])
             }
         }
+        value = obrFloat(value)
+
         characteristic.value = value!!
-        if (ActivityCompat.checkSelfPermission(
+        if ( Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(
                 this@MainActivity,
                 Manifest.permission.BLUETOOTH_CONNECT
             ) != PackageManager.PERMISSION_GRANTED
@@ -388,35 +497,52 @@ class MainActivity : AppCompatActivity() {
         gatt!!.writeCharacteristic(characteristic)
     }
 
-    fun requestPerms() {
-        val permble = arrayOf(
-            Manifest.permission.BLUETOOTH_SCAN,
+    fun requestPermsBLE() {
+        val permble = arrayListOf(
             Manifest.permission.BLUETOOTH_ADMIN,
-            Manifest.permission.BLUETOOTH_ADVERTISE,
-            Manifest.permission.BLUETOOTH_CONNECT,
-        )
-        val permbl = arrayOf(
             Manifest.permission.BLUETOOTH,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_SCAN
         )
-        val permloc = arrayOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-        )
-        val permloc2 = arrayOf(
-             Manifest.permission.ACCESS_COARSE_LOCATION,
-        )
-        val permloc3 = arrayOf(
-             Manifest.permission.ACCESS_BACKGROUND_LOCATION
-        )
-       // requestMultiplePermissions.launch(permbl)
-        requestMultiplePermissions.launch(permble)
+        //permission
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) { //  >= android 12
 
-        requestMultiplePermissions.launch(permloc)
-        requestMultiplePermissions.launch(permloc2)
-        requestMultiplePermissions.launch(permloc3)
+            permble.add(Manifest.permission.BLUETOOTH_ADVERTISE)
+        }
 
+          if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) { //  >= android 12
+                requestPermissions(permble.toTypedArray(),200);
+          }else {
+
+              // requestMultiplePermissions.launch(permbl)
+              requestMultiplePermissions.launch(permble.toTypedArray())
+
+
+          }
 
         // ActivityCompat.requestPermissions(this as Activity, perm, 200)
         println("Permission")
+    }
+    fun requestPermsLoc(){
+        val permloc = arrayListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) { //  >= android 12
+
+           permloc.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        }
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) { //  >= android 12
+            requestPermissions(permloc.toTypedArray(),200);
+        }else {
+            requestMultiplePermissions.launch(permloc.toTypedArray())
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val enableLocationIntent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+            this.startActivityForResult(enableLocationIntent, 200)
+        }
+
     }
 
     override fun onRequestPermissionsResult(
@@ -439,4 +565,21 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+    fun pairDevice(device: BluetoothDevice?) {
+        val intent = Intent(ACTION_PAIRING_REQUEST)
+        intent.putExtra(EXTRA_DEVICE, device)
+        println("DEVICE "+device!!.name)
+        intent.putExtra(EXTRA_PAIRING_VARIANT, PAIRING_VARIANT_PIN)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+
+            return
+        }
+
+        this.startActivity(intent)
+    }
 }
